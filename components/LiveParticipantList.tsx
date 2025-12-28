@@ -110,11 +110,11 @@ const LiveParticipantList: React.FC<LiveParticipantListProps> = ({
         <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
                 <thead>
-                    <tr className="bg-slate-900 text-white uppercase text-[10px] tracking-[0.2em] font-black">
+                    <tr className="bg-slate-900 text-white uppercase text-[8px] sm:text-[9px] tracking-[0.1em] font-black">
                         <th className="p-4 border-b border-slate-800">No. Moto</th>
                         <th className="p-4 border-b border-slate-800">Nombre del Piloto</th>
                         <th className="p-4 border-b border-slate-800">Categoría</th>
-                        <th className="p-4 border-b border-slate-800 text-center">Estado</th>
+                        <th className="p-4 border-b border-slate-800 text-center">TRANSPONDER</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">

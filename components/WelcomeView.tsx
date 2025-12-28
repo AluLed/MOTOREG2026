@@ -19,10 +19,14 @@ const WelcomeView: React.FC<WelcomeViewProps> = ({
       <div className="p-8 md:p-12 space-y-10">
         {/* Párrafo 1 */}
         <div className="space-y-6">
-          <p className="text-slate-700 text-lg leading-relaxed text-justify">
-            Para poder competir en cada una de las fechas del CIE 2026, es obligatorio escoger un número de piloto de acuerdo a la categoría en la que quieras participar. 
-            Si aún no lo tienes, da clic en el botón de abajo y sigue las instrucciones.
-          </p>
+          <div className="text-slate-700 text-lg leading-relaxed text-justify">
+            <p>
+              Para poder competir en la Temporada CIE 2026, es obligatorio escoger un número de piloto de acuerdo a la categoría en la que quieras participar. Si aún no lo tienes, da clic en el botón de abajo y sigue las instrucciones.
+            </p>
+            <p className="mt-4 font-bold italic">
+              El Registro de Número CIE 2026 se hace solo una vez en toda la Temporada.
+            </p>
+          </div>
           <div>
             <button 
               onClick={onGoToRegistration}
