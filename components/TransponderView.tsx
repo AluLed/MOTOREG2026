@@ -127,7 +127,7 @@ const TransponderView: React.FC<TransponderViewProps> = ({
                     </div>
                     <p className="text-green-700 font-black text-xl mb-3 uppercase tracking-tight">Ya tienes tu transponder asignado</p>
                     <p className="text-slate-500 text-sm leading-relaxed mb-8 px-4">
-                        ¡Excelente! Tu registro para esta fecha está confirmado. Presenta una identificación oficial el día del evento para recibir tu equipo.
+                        ¡Excelente! Tu registro para esta fecha está confirmado. Presenta una identificación oficial el día del evento para recibir tu Transponder.
                     </p>
                     
                     <button 
