@@ -1,16 +1,15 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { Participant } from '../types';
-
-// Initialize Gemini
-// Ensure process.env.API_KEY is available in the environment
-// Always use new GoogleGenAI({apiKey: process.env.API_KEY});
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const analyzeRegistrations = async (participants: Participant[]): Promise<string> => {
   if (participants.length === 0) {
     return "No hay participantes registrados para analizar.";
   }
+
+  // Fix: Initializing GoogleGenAI inside the function to ensure it has access to 
+  // the latest API key and avoids potential initialization issues during module load.
+  // Always use new GoogleGenAI({apiKey: process.env.API_KEY});
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   // Create a simplified list for the prompt to save tokens
   const dataSummary = participants.map(p => 
