@@ -1,34 +1,24 @@
-import { GoogleGenAI } from "@google/genai";
-import { Participant } from '../types.ts';
 
-const getApiKey = () => {
-  try {
-    // Si process.env está disponible (inyectado por Vercel o bundler)
-    return process.env.API_KEY || '';
-  } catch (e) {
-    return '';
-  }
-};
+import { GoogleGenAI } from "@google/genai";
+import { Participant } from '../types';
+
+// Initialize Gemini
+// Ensure process.env.API_KEY is available in the environment
+// Always use new GoogleGenAI({apiKey: process.env.API_KEY});
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const analyzeRegistrations = async (participants: Participant[]): Promise<string> => {
-  const apiKey = getApiKey();
-  
-  if (!apiKey) {
-    return "El servicio de IA no está configurado (Falta API_KEY en las variables de entorno de Vercel).";
-  }
-
   if (participants.length === 0) {
     return "No hay participantes registrados para analizar.";
   }
 
-  // Inicializar dentro de la función para asegurar que tome la última API_KEY disponible
-  const ai = new GoogleGenAI({ apiKey });
-
+  // Create a simplified list for the prompt to save tokens
   const dataSummary = participants.map(p => 
     `- Cat: ${p.category}, Res: ${p.residence}`
   ).join('\n');
 
   try {
+    // Use gemini-3-flash-preview for basic text tasks like summarization
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `
@@ -40,12 +30,13 @@ export const analyzeRegistrations = async (participants: Participant[]): Promise
         Por favor, genera un resumen ejecutivo breve (máximo 150 palabras) en español que incluya:
         1. ¿Cuál es la categoría más competitiva (con más inscritos)?
         2. Diversidad geográfica (de dónde vienen la mayoría).
-        3. Una sugerencia logística basada en estos datos.
+        3. Una sugerencia logística basada en estos datos (ej. si hay muchos novatos, sugerir más seguridad en zonas fáciles).
         
         Mantén un tono profesional y motivador.
       `,
     });
 
+    // Directly access the .text property of GenerateContentResponse
     return response.text || "No se pudo generar el análisis.";
   } catch (error) {
     console.error("Error calling Gemini API:", error);

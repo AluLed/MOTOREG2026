@@ -6,21 +6,10 @@
     <title>MotoReg - Registro de Evento</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script>
-      // Definición global para evitar que la app falle si el entorno no es un bundler
-      window.process = { env: { API_KEY: "" } };
-    </script>
     <style>
       body {
         font-family: 'Inter', sans-serif;
         background-color: #f3f4f6;
-      }
-      .animate-fade-in {
-        animation: fadeIn 0.5s ease-out;
-      }
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
       }
     </style>
   <script type="importmap">
@@ -38,7 +27,5 @@
 </head>
   <body>
     <div id="root"></div>
-    <!-- Carga del punto de entrada de la aplicación -->
-    <script type="module" src="./index.tsx"></script>
   </body>
 </html>

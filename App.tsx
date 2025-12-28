@@ -1,45 +1,44 @@
 import React, { useState, useEffect } from 'react';
-import { Participant, Category, TransponderEntry } from './types.ts';
-import RegistrationForm from './components/RegistrationForm.tsx';
-import AdminPanel from './components/AdminPanel.tsx';
-import TransponderView from './components/TransponderView.tsx';
-import LiveParticipantList from './components/LiveParticipantList.tsx';
-import WelcomeView from './components/WelcomeView.tsx';
-import { ADMIN_PASSWORD } from './constants.ts';
+import { Participant, Category, TransponderEntry } from './types';
+import RegistrationForm from './components/RegistrationForm';
+import AdminPanel from './components/AdminPanel';
+import TransponderView from './components/TransponderView';
+import LiveParticipantList from './components/LiveParticipantList';
+import WelcomeView from './components/WelcomeView';
+import CodeRecoveryView from './components/CodeRecoveryView';
+import { ADMIN_PASSWORD } from './constants';
 import { Bike, ShieldCheck, Lock, Radio, List } from 'lucide-react';
 
-type ViewState = 'home' | 'registration' | 'admin' | 'login' | 'transponder' | 'public-list';
+type ViewState = 'home' | 'registration' | 'admin' | 'login' | 'transponder' | 'public-list' | 'code-recovery';
+
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+};
 
 function App() {
-  // Application State
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [transponderEntries, setTransponderEntries] = useState<TransponderEntry[]>([]);
-  const [currentRaceName, setCurrentRaceName] = useState<string>("Carrera General");
-  const [isRegistrationOpen, setIsRegistrationOpen] = useState(true);
+  const [participants, setParticipants] = useState<Participant[]>(() => {
+    const saved = localStorage.getItem('motoReg_participants');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [transponderEntries, setTransponderEntries] = useState<TransponderEntry[]>(() => {
+    const saved = localStorage.getItem('motoReg_transponders');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [currentRaceName, setCurrentRaceName] = useState<string>(() => {
+    const saved = localStorage.getItem('motoReg_raceName');
+    return saved ? JSON.parse(saved) : "Carrera General";
+  });
+  const [isRegistrationOpen, setIsRegistrationOpen] = useState(() => {
+    const saved = localStorage.getItem('motoReg_status');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  
   const [currentView, setCurrentView] = useState<ViewState>('home');
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [loginError, setLoginError] = useState(false);
-
-  // Persistence (LocalStorage Mock Backend)
-  useEffect(() => {
-    const savedData = localStorage.getItem('motoReg_participants');
-    const savedStatus = localStorage.getItem('motoReg_status');
-    const savedTransponders = localStorage.getItem('motoReg_transponders');
-    const savedRaceName = localStorage.getItem('motoReg_raceName');
-    
-    if (savedData) {
-      setParticipants(JSON.parse(savedData));
-    }
-    if (savedStatus) {
-      setIsRegistrationOpen(JSON.parse(savedStatus));
-    }
-    if (savedTransponders) {
-      setTransponderEntries(JSON.parse(savedTransponders));
-    }
-    if (savedRaceName) {
-      setCurrentRaceName(JSON.parse(savedRaceName));
-    }
-  }, []);
 
   useEffect(() => {
     localStorage.setItem('motoReg_participants', JSON.stringify(participants));
@@ -57,11 +56,10 @@ function App() {
     localStorage.setItem('motoReg_raceName', JSON.stringify(currentRaceName));
   }, [currentRaceName]);
 
-  // Handlers
   const handleRegister = (newParticipantData: Omit<Participant, 'id' | 'registrationDate'>) => {
     const newParticipant: Participant = {
       ...newParticipantData,
-      id: crypto.randomUUID(),
+      id: generateId(),
       registrationDate: new Date().toISOString(),
     };
     setParticipants(prev => [newParticipant, ...prev]);
@@ -69,16 +67,28 @@ function App() {
 
   const handleTransponderCheckIn = (participantId: string) => {
     const newEntry: TransponderEntry = {
-        id: crypto.randomUUID(),
+        id: generateId(),
         participantId,
         timestamp: new Date().toISOString()
     };
-    setTransponderEntries(prev => [newEntry, ...prev]);
+    setTransponderEntries(prev => {
+        if (prev.some(e => e.participantId === participantId)) return prev;
+        return [newEntry, ...prev];
+    });
   };
 
   const handleStartNewRace = (raceName: string) => {
     setTransponderEntries([]);
     setCurrentRaceName(raceName);
+  };
+
+  const handleDeleteParticipant = (id: string) => {
+    setParticipants(prev => prev.filter(p => p.id !== id));
+    setTransponderEntries(prev => prev.filter(e => e.participantId !== id));
+  };
+
+  const handleRemoveTransponderEntry = (entryId: string) => {
+    setTransponderEntries(prev => prev.filter(e => e.id !== entryId));
   };
 
   const handleAdminLogin = (e: React.FormEvent) => {
@@ -96,27 +106,16 @@ function App() {
     setIsRegistrationOpen(prev => !prev);
   };
 
-  // Render Views
   const renderContent = () => {
     switch (currentView) {
       case 'home':
-        return (
-          <WelcomeView 
-            onGoToRegistration={() => setCurrentView('registration')}
-            onGoToTransponder={() => setCurrentView('transponder')}
-            onViewPublicList={() => setCurrentView('public-list')}
-          />
-        );
-
+        return <WelcomeView onGoToRegistration={() => setCurrentView('registration')} onGoToTransponder={() => setCurrentView('transponder')} onViewPublicList={() => setCurrentView('public-list')} onGoToRecovery={() => setCurrentView('code-recovery')} />;
       case 'registration':
         return (
           <div className="space-y-8 animate-fade-in">
             <div className="flex justify-center">
                  <div className="flex flex-col gap-2 max-w-[340px] w-full">
-                    <button 
-                        onClick={() => setCurrentView('public-list')}
-                        className="bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 px-6 py-4 rounded-xl shadow-md flex items-center gap-4 transform transition-transform hover:scale-105 w-full"
-                    >
+                    <button onClick={() => setCurrentView('public-list')} className="bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 px-6 py-4 rounded-xl shadow-md flex items-center gap-4 transition-transform hover:scale-105 w-full">
                         <List className="w-6 h-6 text-orange-500 shrink-0" />
                         <div className="text-left">
                             <span className="block text-xs text-slate-500 font-medium uppercase tracking-wide">Consulta</span>
@@ -125,16 +124,9 @@ function App() {
                     </button>
                  </div>
             </div>
-
-            <RegistrationForm 
-                onRegister={handleRegister} 
-                isOpen={isRegistrationOpen} 
-                existingParticipants={participants}
-                onGoToTransponder={() => setCurrentView('transponder')}
-            />
+            <RegistrationForm onRegister={handleRegister} isOpen={isRegistrationOpen} existingParticipants={participants} onGoToTransponder={() => setCurrentView('transponder')} />
           </div>
         );
-
       case 'admin':
         return (
           <AdminPanel 
@@ -145,31 +137,16 @@ function App() {
             onToggleStatus={toggleStatus}
             onLogout={() => setCurrentView('home')}
             onStartNewRace={handleStartNewRace}
+            onDeleteParticipant={handleDeleteParticipant}
+            onRemoveTransponderEntry={handleRemoveTransponderEntry}
           />
         );
-      
       case 'transponder':
-        return (
-            <TransponderView 
-                participants={participants}
-                transponderEntries={transponderEntries}
-                currentRaceName={currentRaceName}
-                onCheckIn={handleTransponderCheckIn}
-                onHome={() => setCurrentView('home')}
-                onViewPublicList={() => setCurrentView('public-list')}
-            />
-        );
-
+        return <TransponderView participants={participants} transponderEntries={transponderEntries} currentRaceName={currentRaceName} onCheckIn={handleTransponderCheckIn} onHome={() => setCurrentView('home')} onViewPublicList={() => setCurrentView('public-list')} />;
       case 'public-list':
-        return (
-          <LiveParticipantList 
-            participants={participants}
-            transponderEntries={transponderEntries}
-            currentRaceName={currentRaceName}
-            onBack={() => setCurrentView('home')}
-          />
-        );
-
+        return <LiveParticipantList participants={participants} transponderEntries={transponderEntries} currentRaceName={currentRaceName} onBack={() => setCurrentView('home')} />;
+      case 'code-recovery':
+        return <CodeRecoveryView participants={participants} onBack={() => setCurrentView('home')} />;
       case 'login':
         return (
           <div className="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg mt-10">
@@ -183,37 +160,17 @@ function App() {
             <form onSubmit={handleAdminLogin}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Contraseña</label>
-                <input 
-                  type="password" 
-                  value={adminPasswordInput}
-                  onChange={(e) => setAdminPasswordInput(e.target.value)}
-                  className="w-full px-4 py-2 bg-slate-50 text-slate-900 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder-slate-400"
-                  placeholder="••••••"
-                  autoFocus
-                />
-                {loginError && <p className="text-red-500 text-xs mt-2">Contraseña incorrecta. Intenta "admin".</p>}
+                <input type="password" value={adminPasswordInput} onChange={(e) => setAdminPasswordInput(e.target.value)} className="w-full px-4 py-2 bg-slate-50 text-slate-900 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none placeholder-slate-400" placeholder="••••••" autoFocus />
+                {loginError && <p className="text-red-500 text-xs mt-2">Contraseña incorrecta.</p>}
               </div>
               <div className="flex gap-3">
-                 <button 
-                  type="button" 
-                  onClick={() => setCurrentView('home')}
-                  className="w-1/3 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit" 
-                  className="w-2/3 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors font-medium"
-                >
-                  Entrar
-                </button>
+                <button type="button" onClick={() => setCurrentView('home')} className="w-1/3 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors">Cancelar</button>
+                <button type="submit" className="w-2/3 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors font-medium">Entrar</button>
               </div>
             </form>
           </div>
         );
-
-      default:
-        return null;
+      default: return null;
     }
   };
 
@@ -222,39 +179,22 @@ function App() {
       <nav className="bg-slate-900 text-white shadow-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div 
-              className="flex items-center gap-2 font-bold text-xl cursor-pointer hover:text-orange-400 transition-colors"
-              onClick={() => setCurrentView('home')}
-            >
+            <div className="flex items-center gap-2 font-bold text-xl cursor-pointer hover:text-orange-400 transition-colors" onClick={() => setCurrentView('home')}>
               <Bike className="w-8 h-8 text-orange-500" />
               <span className="tracking-tight">MOTO<span className="text-orange-500">REG</span></span>
             </div>
             <div className="flex items-center gap-4 sm:gap-6">
-              <button 
-                onClick={() => setCurrentView('public-list')}
-                className="flex items-center gap-2 text-sm text-slate-300 hover:text-white transition-colors"
-              >
-                <List className="w-4 h-4" /> 
-                <span className="hidden sm:inline">Lista de Pilotos</span>
+              <button onClick={() => setCurrentView('public-list')} className="flex items-center gap-2 text-sm text-slate-300 hover:text-white transition-colors">
+                <List className="w-4 h-4" /><span className="hidden sm:inline">Lista de Pilotos</span>
               </button>
-              
-              {currentView !== 'admin' && currentView !== 'login' && (
-                <button 
-                  onClick={() => setCurrentView('login')}
-                  className="flex items-center gap-2 text-sm text-slate-300 hover:text-white transition-colors"
-                >
-                  <ShieldCheck className="w-4 h-4" /> 
-                  <span className="hidden sm:inline">Admin</span>
-                </button>
-              )}
+              <button onClick={() => setCurrentView('login')} className="flex items-center gap-2 text-sm text-slate-300 hover:text-white transition-colors">
+                <ShieldCheck className="w-4 h-4" /><span className="hidden sm:inline">Admin</span>
+              </button>
             </div>
           </div>
         </div>
       </nav>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
-        {renderContent()}
-      </main>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">{renderContent()}</main>
     </div>
   );
 }
