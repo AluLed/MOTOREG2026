@@ -1,11 +1,24 @@
 import { GoogleGenAI } from "@google/genai";
 import { Participant } from '../types';
 
-// Initialize Gemini
-// Ensure process.env.API_KEY is available in the environment
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+// Comprobación de seguridad para evitar que la app explote si process no existe
+const getApiKey = () => {
+  try {
+    return process.env.API_KEY || '';
+  } catch (e) {
+    console.warn("Ambiente process.env no detectado. Asegúrate de configurar la variable API_KEY.");
+    return '';
+  }
+};
+
+const apiKey = getApiKey();
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 export const analyzeRegistrations = async (participants: Participant[]): Promise<string> => {
+  if (!ai) {
+    return "El servicio de IA no está configurado (Falta API_KEY).";
+  }
+
   if (participants.length === 0) {
     return "No hay participantes registrados para analizar.";
   }
@@ -36,6 +49,6 @@ export const analyzeRegistrations = async (participants: Participant[]): Promise
     return response.text || "No se pudo generar el análisis.";
   } catch (error) {
     console.error("Error calling Gemini API:", error);
-    return "Hubo un error al conectar con la IA de análisis. Verifica tu API Key.";
+    return "Hubo un error al conectar con la IA de análisis. Verifica tu API Key en Vercel.";
   }
 };
