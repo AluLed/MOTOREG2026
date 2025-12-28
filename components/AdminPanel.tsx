@@ -17,7 +17,8 @@ import {
   Trash2,
   X,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -143,6 +144,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     link.click();
   };
 
+  const handleAiAnalysis = async () => {
+    setLoadingAnalysis(true);
+    setAiAnalysis(null);
+    try {
+        const result = await analyzeRegistrations(participants);
+        setAiAnalysis(result);
+    } catch (e) {
+        setAiAnalysis("Error fatal al procesar el análisis.");
+    } finally {
+        setLoadingAnalysis(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -174,17 +188,28 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
         </div>
-        <button onClick={async () => { setLoadingAnalysis(true); setAiAnalysis(await analyzeRegistrations(participants)); setLoadingAnalysis(false); }} disabled={loadingAnalysis} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3 hover:bg-slate-50 disabled:opacity-50 text-left transition-all">
-          <div className="p-2 bg-purple-100 rounded-lg text-purple-600"><BrainCircuit className="w-6 h-6" /></div>
-          <div><p className="text-xs text-slate-500 font-medium">Análisis IA</p><p className="text-sm font-bold text-purple-700">{loadingAnalysis ? '...' : 'Analizar'}</p></div>
+        <button 
+          onClick={handleAiAnalysis} 
+          disabled={loadingAnalysis} 
+          className={`bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3 hover:bg-slate-50 disabled:opacity-50 text-left transition-all ${loadingAnalysis ? 'animate-pulse border-purple-300' : ''}`}
+        >
+          <div className={`p-2 rounded-lg ${loadingAnalysis ? 'bg-purple-200 text-purple-700' : 'bg-purple-100 text-purple-600'}`}>
+            {loadingAnalysis ? <RefreshCw className="w-6 h-6 animate-spin" /> : <BrainCircuit className="w-6 h-6" />}
+          </div>
+          <div><p className="text-xs text-slate-500 font-medium">Análisis IA</p><p className="text-sm font-bold text-purple-700">{loadingAnalysis ? 'Procesando...' : 'Generar Informe'}</p></div>
         </button>
       </div>
 
       {aiAnalysis && (
-        <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 relative animate-fade-in shadow-inner">
-            <h3 className="text-lg font-bold text-indigo-800 mb-2 flex items-center gap-2"><BrainCircuit className="w-5 h-5" /> Análisis Gemini</h3>
-            <p className="text-slate-700 text-sm whitespace-pre-line leading-relaxed">{aiAnalysis}</p>
-            <button onClick={() => setAiAnalysis(null)} className="absolute top-4 right-4 text-indigo-400 hover:text-indigo-600">✕</button>
+        <div className={`rounded-xl p-6 relative animate-fade-in shadow-inner border ${aiAnalysis.startsWith('Error') ? 'bg-red-50 border-red-100' : 'bg-indigo-50 border-indigo-100'}`}>
+            <h3 className={`text-lg font-bold mb-2 flex items-center gap-2 ${aiAnalysis.startsWith('Error') ? 'text-red-800' : 'text-indigo-800'}`}>
+                {aiAnalysis.startsWith('Error') ? <AlertTriangle className="w-5 h-5" /> : <BrainCircuit className="w-5 h-5" />} 
+                {aiAnalysis.startsWith('Error') ? 'Problema Detectado' : 'Análisis Gemini IA'}
+            </h3>
+            <p className={`${aiAnalysis.startsWith('Error') ? 'text-red-700' : 'text-slate-700'} text-sm whitespace-pre-line leading-relaxed`}>
+                {aiAnalysis}
+            </p>
+            <button onClick={() => setAiAnalysis(null)} className={`absolute top-4 right-4 ${aiAnalysis.startsWith('Error') ? 'text-red-400 hover:text-red-600' : 'text-indigo-400 hover:text-indigo-600'}`}>✕</button>
         </div>
       )}
 
