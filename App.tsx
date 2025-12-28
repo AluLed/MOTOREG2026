@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Participant, Category, TransponderEntry } from './types';
-import RegistrationForm from './components/RegistrationForm';
-import AdminPanel from './components/AdminPanel';
-import TransponderView from './components/TransponderView';
-import LiveParticipantList from './components/LiveParticipantList';
-import WelcomeView from './components/WelcomeView';
-import { ADMIN_PASSWORD } from './constants';
+import { Participant, Category, TransponderEntry } from './types.ts';
+import RegistrationForm from './components/RegistrationForm.tsx';
+import AdminPanel from './components/AdminPanel.tsx';
+import TransponderView from './components/TransponderView.tsx';
+import LiveParticipantList from './components/LiveParticipantList.tsx';
+import WelcomeView from './components/WelcomeView.tsx';
+import { ADMIN_PASSWORD } from './constants.ts';
 import { Bike, ShieldCheck, Lock, Radio, List } from 'lucide-react';
 
 type ViewState = 'home' | 'registration' | 'admin' | 'login' | 'transponder' | 'public-list';
@@ -61,7 +61,7 @@ function App() {
   const handleRegister = (newParticipantData: Omit<Participant, 'id' | 'registrationDate'>) => {
     const newParticipant: Participant = {
       ...newParticipantData,
-      id: crypto.randomUUID(), // Modern browser UUID
+      id: crypto.randomUUID(),
       registrationDate: new Date().toISOString(),
     };
     setParticipants(prev => [newParticipant, ...prev]);
@@ -112,7 +112,6 @@ function App() {
         return (
           <div className="space-y-8 animate-fade-in">
             <div className="flex justify-center">
-                 {/* Public List Section */}
                  <div className="flex flex-col gap-2 max-w-[340px] w-full">
                     <button 
                         onClick={() => setCurrentView('public-list')}
@@ -220,7 +219,6 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-12">
-      {/* Navbar */}
       <nav className="bg-slate-900 text-white shadow-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -254,7 +252,6 @@ function App() {
         </div>
       </nav>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
         {renderContent()}
       </main>
