@@ -19,4 +19,4 @@ export const CATEGORIES = [
 
 // In a real app, this would be on the server.
 // For this demo, the admin password is hardcoded.
-export const ADMIN_PASSWORD = "admin";
+export const ADMIN_PASSWORD = "AluCIE";

@@ -3,7 +3,6 @@ import { Participant, RegistrationStats, TransponderEntry } from '../types';
 import { CATEGORIES } from '../constants';
 import { analyzeRegistrations } from '../services/geminiService';
 import { 
-  Download, 
   Lock, 
   Unlock, 
   Search, 
@@ -52,7 +51,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newRaceName, setNewRaceName] = useState('');
   const [isConfirmingNewRace, setIsConfirmingNewRace] = useState(false);
 
-  // States for row-level confirmation (avoids window.confirm)
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
 
@@ -124,6 +122,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  const handleAiAnalysis = async () => {
+    setLoadingAnalysis(true);
+    setAiAnalysis(null);
+    try {
+        const result = await analyzeRegistrations(participants);
+        setAiAnalysis(result);
+    } catch (e) {
+        setAiAnalysis("Error fatal al procesar el análisis.");
+    } finally {
+        setLoadingAnalysis(false);
+    }
+  };
+
   const downloadDatabaseCSV = () => {
     const headers = ["ID,Nombre,Moto,Categoria,Telefono,Residencia,Fecha,Codigo"];
     const rows = participants.map(p => `${p.id},"${p.fullName}",${p.motoNumber},"${p.category}","${p.phone}","${p.residence}",${p.registrationDate},${p.accessCode}`);
@@ -142,19 +153,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     link.href = encodeURI(csvContent);
     link.download = `lista_${currentRaceName.replace(/\s+/g, '_')}.csv`;
     link.click();
-  };
-
-  const handleAiAnalysis = async () => {
-    setLoadingAnalysis(true);
-    setAiAnalysis(null);
-    try {
-        const result = await analyzeRegistrations(participants);
-        setAiAnalysis(result);
-    } catch (e) {
-        setAiAnalysis("Error fatal al procesar el análisis.");
-    } finally {
-        setLoadingAnalysis(false);
-    }
   };
 
   return (
@@ -215,8 +213,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
       <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
           <div className="flex border-b border-slate-200 bg-slate-50">
-              <button onClick={() => { setActiveTab('database'); setConfirmingDeleteId(null); setConfirmingRemoveId(null); }} className={`flex-1 py-4 text-xs font-black tracking-widest transition-all ${activeTab === 'database' ? 'text-blue-600 border-b-2 border-blue-600 bg-white' : 'text-slate-400 hover:text-slate-600'}`}>BASE DE DATOS CIE</button>
-              <button onClick={() => { setActiveTab('live'); setConfirmingDeleteId(null); setConfirmingRemoveId(null); }} className={`flex-1 py-4 text-xs font-black tracking-widest transition-all ${activeTab === 'live' ? 'text-orange-600 border-b-2 border-orange-600 bg-white' : 'text-slate-400 hover:text-slate-600'}`}>CARRERA ACTUAL</button>
+              <button onClick={() => setActiveTab('database')} className={`flex-1 py-4 text-xs font-black tracking-widest transition-all ${activeTab === 'database' ? 'text-blue-600 border-b-2 border-blue-600 bg-white' : 'text-slate-400 hover:text-slate-600'}`}>BASE DE DATOS CIE</button>
+              <button onClick={() => setActiveTab('live')} className={`flex-1 py-4 text-xs font-black tracking-widest transition-all ${activeTab === 'live' ? 'text-orange-600 border-b-2 border-orange-600 bg-white' : 'text-slate-400 hover:text-slate-600'}`}>CARRERA ACTUAL</button>
           </div>
 
           {activeTab === 'database' && (

@@ -11,6 +11,8 @@
         font-family: 'Inter', sans-serif;
         background-color: #f3f4f6;
       }
+      .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
   <script type="importmap">
 {
@@ -20,7 +22,8 @@
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
     "react": "https://aistudiocdn.com/react@^19.2.1",
     "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "recharts": "https://aistudiocdn.com/recharts@^3.5.1"
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
+    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.1/+esm"
   }
 }
 </script>

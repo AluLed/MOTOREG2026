@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Participant, Category, TransponderEntry } from './types';
+import { Participant, TransponderEntry } from './types';
 import RegistrationForm from './components/RegistrationForm';
 import AdminPanel from './components/AdminPanel';
 import TransponderView from './components/TransponderView';
@@ -7,88 +7,120 @@ import LiveParticipantList from './components/LiveParticipantList';
 import WelcomeView from './components/WelcomeView';
 import CodeRecoveryView from './components/CodeRecoveryView';
 import { ADMIN_PASSWORD } from './constants';
-import { Bike, ShieldCheck, Lock, Radio, List } from 'lucide-react';
+import { supabase, mapFromDb, mapToDb } from './services/supabase';
+import { Bike, ShieldCheck, Lock, Radio, List, Loader2 } from 'lucide-react';
 
 type ViewState = 'home' | 'registration' | 'admin' | 'login' | 'transponder' | 'public-list' | 'code-recovery';
 
-const generateId = () => {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
-};
-
 function App() {
-  const [participants, setParticipants] = useState<Participant[]>(() => {
-    const saved = localStorage.getItem('motoReg_participants');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [transponderEntries, setTransponderEntries] = useState<TransponderEntry[]>(() => {
-    const saved = localStorage.getItem('motoReg_transponders');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [currentRaceName, setCurrentRaceName] = useState<string>(() => {
-    const saved = localStorage.getItem('motoReg_raceName');
-    return saved ? JSON.parse(saved) : "Carrera General";
-  });
-  const [isRegistrationOpen, setIsRegistrationOpen] = useState(() => {
-    const saved = localStorage.getItem('motoReg_status');
-    return saved !== null ? JSON.parse(saved) : true;
-  });
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [transponderEntries, setTransponderEntries] = useState<TransponderEntry[]>([]);
+  const [currentRaceName, setCurrentRaceName] = useState<string>("Carrera General");
+  const [isRegistrationOpen, setIsRegistrationOpen] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   
   const [currentView, setCurrentView] = useState<ViewState>('home');
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [loginError, setLoginError] = useState(false);
 
+  // Carga inicial de datos desde Supabase
   useEffect(() => {
-    localStorage.setItem('motoReg_participants', JSON.stringify(participants));
-  }, [participants]);
+    const fetchInitialData = async () => {
+      setIsLoading(true);
+      try {
+        // 1. Participantes
+        const { data: partData } = await supabase.from('participants').select('*');
+        if (partData) setParticipants(mapFromDb(partData));
 
-  useEffect(() => {
-    localStorage.setItem('motoReg_status', JSON.stringify(isRegistrationOpen));
-  }, [isRegistrationOpen]);
+        // 2. Transponders
+        const { data: transData } = await supabase.from('transponder_entries').select('*');
+        if (transData) setTransponderEntries(mapFromDb(transData));
 
-  useEffect(() => {
-    localStorage.setItem('motoReg_transponders', JSON.stringify(transponderEntries));
-  }, [transponderEntries]);
-
-  useEffect(() => {
-    localStorage.setItem('motoReg_raceName', JSON.stringify(currentRaceName));
-  }, [currentRaceName]);
-
-  const handleRegister = (newParticipantData: Omit<Participant, 'id' | 'registrationDate'>) => {
-    const newParticipant: Participant = {
-      ...newParticipantData,
-      id: generateId(),
-      registrationDate: new Date().toISOString(),
+        // 3. Settings (Race Name & Status)
+        const { data: settingsData } = await supabase.from('settings').select('*');
+        if (settingsData) {
+          const raceName = settingsData.find(s => s.key === 'race_name')?.value;
+          const regStatus = settingsData.find(s => s.key === 'registration_open')?.value;
+          if (raceName) setCurrentRaceName(raceName);
+          if (regStatus !== undefined) setIsRegistrationOpen(regStatus === 'true');
+        }
+      } catch (error) {
+        console.error("Error al cargar datos iniciales:", error);
+      } finally {
+        setIsLoading(false);
+      }
     };
-    setParticipants(prev => [newParticipant, ...prev]);
+
+    fetchInitialData();
+
+    // Suscripciones en tiempo real
+    const participantsChannel = supabase.channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setParticipants(prev => [mapFromDb(payload.new) as Participant, ...prev]);
+        } else if (payload.eventType === 'DELETE') {
+          setParticipants(prev => prev.filter(p => p.id !== payload.old.id));
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transponder_entries' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setTransponderEntries(prev => [mapFromDb(payload.new) as TransponderEntry, ...prev]);
+        } else if (payload.eventType === 'DELETE') {
+          setTransponderEntries(prev => prev.filter(e => e.id !== payload.old.id));
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'settings' }, (payload) => {
+        if (payload.new.key === 'race_name') setCurrentRaceName(payload.new.value);
+        if (payload.new.key === 'registration_open') setIsRegistrationOpen(payload.new.value === 'true');
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(participantsChannel);
+    };
+  }, []);
+
+  const handleRegister = async (newParticipantData: Omit<Participant, 'id' | 'registrationDate'>) => {
+    const dbData = mapToDb({
+      ...newParticipantData,
+      registrationDate: new Date().toISOString(),
+    });
+
+    const { error } = await supabase.from('participants').insert([dbData]);
+    if (error) console.error("Error al registrar:", error);
   };
 
-  const handleTransponderCheckIn = (participantId: string) => {
-    const newEntry: TransponderEntry = {
-        id: generateId(),
+  const handleTransponderCheckIn = async (participantId: string) => {
+    // Evitar duplicados
+    if (transponderEntries.some(e => e.participantId === participantId)) return;
+
+    const dbData = mapToDb({
         participantId,
         timestamp: new Date().toISOString()
-    };
-    setTransponderEntries(prev => {
-        if (prev.some(e => e.participantId === participantId)) return prev;
-        return [newEntry, ...prev];
     });
+
+    const { error } = await supabase.from('transponder_entries').insert([dbData]);
+    if (error) console.error("Error en check-in:", error);
   };
 
-  const handleStartNewRace = (raceName: string) => {
+  const handleStartNewRace = async (raceName: string) => {
+    // 1. Limpiar transponders en DB
+    await supabase.from('transponder_entries').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
     setTransponderEntries([]);
+
+    // 2. Actualizar nombre de carrera en settings
+    await supabase.from('settings').upsert({ key: 'race_name', value: raceName });
     setCurrentRaceName(raceName);
   };
 
-  const handleDeleteParticipant = (id: string) => {
-    setParticipants(prev => prev.filter(p => p.id !== id));
-    setTransponderEntries(prev => prev.filter(e => e.participantId !== id));
+  const handleDeleteParticipant = async (id: string) => {
+    // Eliminar de transponders primero (si hay FK) o manual
+    await supabase.from('transponder_entries').delete().eq('participant_id', id);
+    await supabase.from('participants').delete().eq('id', id);
   };
 
-  const handleRemoveTransponderEntry = (entryId: string) => {
-    setTransponderEntries(prev => prev.filter(e => e.id !== entryId));
+  const handleRemoveTransponderEntry = async (entryId: string) => {
+    await supabase.from('transponder_entries').delete().eq('id', entryId);
   };
 
   const handleAdminLogin = (e: React.FormEvent) => {
@@ -102,9 +134,22 @@ function App() {
     }
   };
 
-  const toggleStatus = () => {
-    setIsRegistrationOpen(prev => !prev);
+  const toggleStatus = async () => {
+    const newStatus = !isRegistrationOpen;
+    await supabase.from('settings').upsert({ key: 'registration_open', value: newStatus.toString() });
+    setIsRegistrationOpen(newStatus);
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-12 h-12 text-orange-500 animate-spin mx-auto" />
+          <p className="text-slate-500 font-black uppercase tracking-widest text-xs">Conectando con CIE Cloud...</p>
+        </div>
+      </div>
+    );
+  }
 
   const renderContent = () => {
     switch (currentView) {
