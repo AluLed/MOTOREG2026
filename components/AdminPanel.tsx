@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Participant, RegistrationStats, TransponderEntry } from '../types';
 import { CATEGORIES } from '../constants';
 import { analyzeRegistrations } from '../services/geminiService';
@@ -17,7 +17,8 @@ import {
   X,
   Check,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  CheckCircle2
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -50,6 +51,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [showNewRaceForm, setShowNewRaceForm] = useState(false);
   const [newRaceName, setNewRaceName] = useState('');
   const [isConfirmingNewRace, setIsConfirmingNewRace] = useState(false);
+  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(null);
 
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
@@ -155,6 +157,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     link.click();
   };
 
+  const handleDeleteWithFeedback = (id: string, motoNum: string) => {
+    onDeleteParticipant(id);
+    setConfirmingDeleteId(null);
+    setDeleteSuccessMessage(`¡Registro eliminado! El número #${motoNum} ahora está disponible.`);
+    setTimeout(() => setDeleteSuccessMessage(null), 4000);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -198,6 +207,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         </button>
       </div>
 
+      {deleteSuccessMessage && (
+        <div className="bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-fade-in-up">
+            <CheckCircle2 className="w-5 h-5 shrink-0" />
+            <p className="font-bold text-sm">{deleteSuccessMessage}</p>
+        </div>
+      )}
+
       {aiAnalysis && (
         <div className={`rounded-xl p-6 relative animate-fade-in shadow-inner border ${aiAnalysis.startsWith('Error') ? 'bg-red-50 border-red-100' : 'bg-indigo-50 border-indigo-100'}`}>
             <h3 className={`text-lg font-bold mb-2 flex items-center gap-2 ${aiAnalysis.startsWith('Error') ? 'text-red-800' : 'text-indigo-800'}`}>
@@ -228,38 +244,42 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead><tr className="bg-slate-900 text-white text-[10px] uppercase tracking-widest font-black"><th className="p-4">No. Moto</th><th className="p-4">Piloto</th><th className="p-4">Categoría</th><th className="p-4 text-center">Acciones</th></tr></thead>
+                        <thead><tr className="bg-slate-900 text-white text-[10px] uppercase tracking-widest font-black"><th className="p-4">No. Moto</th><th className="p-4">Piloto</th><th className="p-4">Categoría</th><th className="p-4 text-center">Gestionar</th></tr></thead>
                         <tbody className="divide-y divide-slate-100">
                         {sortedDatabase.length > 0 ? sortedDatabase.map(p => (
                             <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                                 <td className="p-4 font-mono font-black text-blue-600">#{p.motoNumber}</td>
                                 <td className="p-4"><div className="text-sm font-bold text-slate-800">{p.fullName}</div><div className="text-[10px] text-slate-400">ID: {p.accessCode}</div></td>
                                 <td className="p-4 text-xs font-bold text-slate-500 uppercase">{p.category}</td>
-                                <td className="p-4 text-center min-w-[120px]">
+                                <td className="p-4 text-center min-w-[180px]">
                                     {confirmingDeleteId === p.id ? (
-                                        <div className="flex items-center justify-center gap-2 animate-fade-in">
-                                            <button 
-                                              onClick={() => { onDeleteParticipant(p.id); setConfirmingDeleteId(null); }}
-                                              className="p-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 shadow-sm"
-                                              title="Confirmar eliminación"
-                                            >
-                                                <Check className="w-4 h-4" />
-                                            </button>
-                                            <button 
-                                              onClick={() => setConfirmingDeleteId(null)}
-                                              className="p-1.5 bg-slate-200 text-slate-600 rounded-md hover:bg-slate-300"
-                                              title="Cancelar"
-                                            >
-                                                <X className="w-4 h-4" />
-                                            </button>
+                                        <div className="flex flex-col items-center gap-1 animate-fade-in p-1 bg-red-50 rounded-lg border border-red-100">
+                                            <span className="text-[8px] font-black text-red-700 uppercase">¿LIBERAR NÚMERO #{p.motoNumber}?</span>
+                                            <div className="flex items-center gap-2">
+                                                <button 
+                                                  onClick={() => handleDeleteWithFeedback(p.id, p.motoNumber)}
+                                                  className="p-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 shadow-sm flex items-center gap-1 px-2 text-[10px] font-bold"
+                                                  title="Confirmar eliminación y liberar número"
+                                                >
+                                                    <Check className="w-3 h-3" /> SÍ, BORRAR
+                                                </button>
+                                                <button 
+                                                  onClick={() => setConfirmingDeleteId(null)}
+                                                  className="p-1.5 bg-slate-200 text-slate-600 rounded-md hover:bg-slate-300"
+                                                  title="Cancelar"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : (
                                         <button 
                                           onClick={() => setConfirmingDeleteId(p.id)} 
-                                          className="p-2 text-slate-300 hover:text-red-600 transition-colors" 
-                                          title="Borrar de la Base"
+                                          className="p-2 text-slate-300 hover:text-red-600 transition-colors group flex items-center gap-2 mx-auto" 
+                                          title="Eliminar registro y liberar número de moto"
                                         >
                                           <Trash2 className="w-5 h-5" />
+                                          <span className="text-[9px] font-bold opacity-0 group-hover:opacity-100 transition-opacity uppercase">Borrar y liberar</span>
                                         </button>
                                     )}
                                 </td>

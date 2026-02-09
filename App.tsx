@@ -57,7 +57,11 @@ function App() {
     const participantsChannel = supabase.channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, (payload) => {
         if (payload.eventType === 'INSERT') {
-          setParticipants(prev => [mapFromDb(payload.new) as Participant, ...prev]);
+          const newPart = mapFromDb(payload.new) as Participant;
+          setParticipants(prev => {
+            if (prev.some(p => p.id === newPart.id)) return prev;
+            return [newPart, ...prev];
+          });
         } else if (payload.eventType === 'DELETE') {
           setParticipants(prev => prev.filter(p => p.id !== payload.old.id));
         }
@@ -114,9 +118,23 @@ function App() {
   };
 
   const handleDeleteParticipant = async (id: string) => {
-    // Eliminar de transponders primero (si hay FK) o manual
-    await supabase.from('transponder_entries').delete().eq('participant_id', id);
-    await supabase.from('participants').delete().eq('id', id);
+    // Optimistic UI: Remove locally first to free the number immediately
+    const deletedParticipant = participants.find(p => p.id === id);
+    setParticipants(prev => prev.filter(p => p.id !== id));
+    setTransponderEntries(prev => prev.filter(e => e.participantId !== id));
+
+    try {
+        // Eliminar de transponders primero (si hay FK) o manual
+        await supabase.from('transponder_entries').delete().eq('participant_id', id);
+        const { error } = await supabase.from('participants').delete().eq('id', id);
+        if (error) throw error;
+    } catch (error) {
+        console.error("Error al eliminar participante:", error);
+        // Rollback if error
+        if (deletedParticipant) {
+            setParticipants(prev => [deletedParticipant, ...prev]);
+        }
+    }
   };
 
   const handleRemoveTransponderEntry = async (entryId: string) => {
