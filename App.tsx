@@ -27,21 +27,25 @@ function App() {
 
   // Cargar datos locales o de Supabase
   const fetchData = async () => {
-    setIsLoading(true);
+    // Si es la primera carga, mostramos el loader
+    if (isLoading) setIsLoading(true);
     setDataError(null);
 
-    // Intentar cargar de localStorage primero (Respaldo local)
+    // Intentar cargar de localStorage primero (Respaldo local rápido)
     const localParts = localStorage.getItem('motoreg_participants');
     const localTrans = localStorage.getItem('motoreg_transponders');
     const localRace = localStorage.getItem('motoreg_race_name');
+    const localStatus = localStorage.getItem('motoreg_reg_open');
 
     if (localParts) setParticipants(JSON.parse(localParts));
     if (localTrans) setTransponderEntries(JSON.parse(localTrans));
     if (localRace) setCurrentRaceName(localRace);
+    if (localStatus) setIsRegistrationOpen(localStatus === 'true');
 
-    // Si Supabase está conectado, intentar sincronizar
+    // Si Supabase está conectado, sincronizar todo
     if (supabase) {
       try {
+        // 1. Sincronizar Participantes
         const { data: partData, error: partError } = await supabase.from('participants').select('*');
         if (!partError && partData) {
           const mapped = mapFromDb(partData);
@@ -49,14 +53,31 @@ function App() {
           localStorage.setItem('motoreg_participants', JSON.stringify(mapped));
         }
 
+        // 2. Sincronizar Transponders
         const { data: transData } = await supabase.from('transponder_entries').select('*');
         if (transData) {
           const mapped = mapFromDb(transData);
           setTransponderEntries(mapped);
           localStorage.setItem('motoreg_transponders', JSON.stringify(mapped));
         }
+
+        // 3. Sincronizar Ajustes (Nombre de carrera y estado de registro)
+        const { data: settingsData } = await supabase.from('settings').select('*');
+        if (settingsData) {
+          settingsData.forEach(s => {
+            if (s.key === 'race_name') {
+                setCurrentRaceName(s.value);
+                localStorage.setItem('motoreg_race_name', s.value);
+            }
+            if (s.key === 'registration_open') {
+                const isOpen = s.value === 'true';
+                setIsRegistrationOpen(isOpen);
+                localStorage.setItem('motoreg_reg_open', String(isOpen));
+            }
+          });
+        }
       } catch (error) {
-        console.warn("Supabase no disponible, usando modo local.");
+        console.warn("Error en sincronización con Supabase:", error);
       }
     }
 
@@ -66,13 +87,17 @@ function App() {
   useEffect(() => {
     fetchData();
 
+    // Suscripciones en tiempo real para todas las tablas críticas
     if (supabase) {
-      const channel = supabase.channel('app-sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, (payload) => {
+      const channel = supabase.channel('app-sync-all')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, () => {
           fetchData(); 
         })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'transponder_entries' }, (payload) => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'transponder_entries' }, () => {
           fetchData();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, () => {
+          fetchData(); // Esto actualizará el nombre de la carrera en todos los dispositivos
         })
         .subscribe();
 
@@ -80,21 +105,12 @@ function App() {
     }
   }, []);
 
-  // Guardar en localStorage cada vez que cambian los datos (Modo Local Seguro)
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem('motoreg_participants', JSON.stringify(participants));
-      localStorage.setItem('motoreg_transponders', JSON.stringify(transponderEntries));
-      localStorage.setItem('motoreg_race_name', currentRaceName);
-    }
-  }, [participants, transponderEntries, currentRaceName, isLoading]);
-
   const handleRegister = async (newParticipantData: Omit<Participant, 'id' | 'registrationDate'>) => {
     const tempId = 'p_' + Date.now();
     const registrationDate = new Date().toISOString();
     const fullParticipant: Participant = { ...newParticipantData, id: tempId, registrationDate };
 
-    // Registro Local inmediato
+    // Optimismo local
     setParticipants(prev => [fullParticipant, ...prev]);
 
     if (supabase) {
@@ -116,7 +132,6 @@ function App() {
       timestamp: new Date().toISOString()
     };
     
-    // Check-in Local inmediato
     setTransponderEntries(prev => [tempEntry, ...prev]);
 
     if (supabase) {
@@ -132,31 +147,30 @@ function App() {
   };
 
   const handleStartNewRace = async (raceName: string) => {
+    // 1. Limpieza local
     setTransponderEntries([]);
     setCurrentRaceName(raceName);
     
+    // 2. Limpieza en Nube
     if (supabase) {
       try {
+        // Eliminar todos los transponders de la tabla
         await supabase.from('transponder_entries').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        // Actualizar el nombre de la carrera para que otros dispositivos lo vean
         await supabase.from('settings').upsert({ key: 'race_name', value: raceName });
-      } catch (e) { console.error(e); }
+      } catch (e) { console.error("Error al iniciar nueva carrera:", e); }
     }
   };
 
   const handleDeleteParticipant = async (id: string) => {
-    // 1. ELIMINACIÓN LOCAL INMEDIATA (Libera el número al instante)
     setParticipants(prev => prev.filter(p => p.id !== id));
     setTransponderEntries(prev => prev.filter(e => e.participantId !== id));
 
-    // 2. ELIMINACIÓN EN NUBE (Si está configurado)
     if (supabase) {
       try {
-        // Primero eliminar entradas de transponder para evitar errores de llave foránea
         await supabase.from('transponder_entries').delete().eq('participant_id', id);
         await supabase.from('participants').delete().eq('id', id);
-      } catch (e) { 
-        console.error("Error al eliminar de la nube:", e);
-      }
+      } catch (e) { console.error("Error al eliminar:", e); }
     }
   };
 
@@ -195,7 +209,7 @@ function App() {
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center space-y-4">
           <Loader2 className="w-12 h-12 text-orange-500 animate-spin mx-auto" />
-          <p className="text-slate-500 font-black uppercase tracking-widest text-xs">Conectando MotoReg...</p>
+          <p className="text-slate-500 font-black uppercase tracking-widest text-xs">Sincronizando MotoReg...</p>
         </div>
       </div>
     );
