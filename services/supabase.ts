@@ -1,11 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-// DEJA ESTOS CAMPOS VACÍOS PARA DESCONECTAR. 
-// Cuando tengas tu nuevo proyecto, pega aquí la URL y la Key.
-const supabaseUrl = ''; 
-const supabaseKey = '';
+// Datos del proyecto proporcionados por el usuario
+const supabaseUrl = 'https://greelqkztddhnzanfyml.supabase.co'; 
+const supabaseKey = 'sb_publishable_X1HiLFEGtjtVsN3JLwYyVA_OItJfpZO';
 
-// El cliente solo se inicializa si hay credenciales válidas
+// El cliente se inicializa con las credenciales del proyecto
 export const supabase = (supabaseUrl && supabaseKey) 
     ? createClient(supabaseUrl, supabaseKey) 
     : null;
