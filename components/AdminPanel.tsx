@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
+
+import React, { useState, useMemo } from 'react';
 import { Participant, RegistrationStats, TransponderEntry } from '../types';
 import { CATEGORIES } from '../constants';
 import { analyzeRegistrations } from '../services/geminiService';
@@ -18,7 +19,8 @@ import {
   Check,
   AlertTriangle,
   RefreshCw,
-  CheckCircle2
+  CheckCircle2,
+  UserX
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -51,7 +53,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [showNewRaceForm, setShowNewRaceForm] = useState(false);
   const [newRaceName, setNewRaceName] = useState('');
   const [isConfirmingNewRace, setIsConfirmingNewRace] = useState(false);
-  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
@@ -105,6 +107,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     }, { total: 0, byCategory: {} } as RegistrationStats);
   }, [participants]);
 
+  const handleDeleteWithFeedback = (id: string, motoNum: string) => {
+    onDeleteParticipant(id);
+    setConfirmingDeleteId(null);
+    setSuccessMessage(`¡Éxito! El número #${motoNum} ha sido liberado y ya puede usarse nuevamente.`);
+    setTimeout(() => setSuccessMessage(null), 5000);
+  };
+
   const handleStartNewRaceClick = () => {
     if (newRaceName.trim()) {
       setIsConfirmingNewRace(true);
@@ -121,6 +130,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       setShowNewRaceForm(false);
       setIsConfirmingNewRace(false);
       setActiveTab('live');
+      setSuccessMessage("Se ha iniciado una nueva fecha. Lista de transponders reiniciada.");
+      setTimeout(() => setSuccessMessage(null), 4000);
     }
   };
 
@@ -157,19 +168,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     link.click();
   };
 
-  const handleDeleteWithFeedback = (id: string, motoNum: string) => {
-    onDeleteParticipant(id);
-    setConfirmingDeleteId(null);
-    setDeleteSuccessMessage(`¡Registro eliminado! El número #${motoNum} ahora está disponible.`);
-    setTimeout(() => setDeleteSuccessMessage(null), 4000);
-  };
-
   return (
     <div className="space-y-6 animate-fade-in pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-3xl font-black text-slate-800 tracking-tight">Panel Administrativo</h2>
-          <p className="text-slate-500">Control de Eventos Oficial CIE 2026</p>
+          <p className="text-slate-500">Gestión de Pilotos y Liberación de Números</p>
         </div>
         <button onClick={onLogout} className="flex items-center gap-2 text-slate-500 hover:text-red-600 transition-colors font-bold bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm">
           <LogOut className="w-5 h-5" /> Salir del Panel
@@ -179,7 +183,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
           <div className="p-2 bg-blue-100 rounded-lg text-blue-600"><Users className="w-6 h-6" /></div>
-          <div><p className="text-xs text-slate-500 font-medium">Base de Datos</p><p className="text-2xl font-bold text-slate-800">{stats.total}</p></div>
+          <div><p className="text-xs text-slate-500 font-medium">Registrados</p><p className="text-2xl font-bold text-slate-800">{stats.total}</p></div>
         </div>
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
           <div className="p-2 bg-orange-100 rounded-lg text-orange-600"><Radio className="w-6 h-6" /></div>
@@ -190,7 +194,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="flex-1">
             <p className="text-xs text-slate-500 font-medium">Inscripciones</p>
             <div className="flex items-center gap-2">
-                <p className={`font-bold text-sm ${isRegistrationOpen ? 'text-green-700' : 'text-red-700'}`}>{isRegistrationOpen ? 'Abierto' : 'Cerrado'}</p>
+                <p className={`font-bold text-sm ${isRegistrationOpen ? 'text-green-700' : 'text-red-700'}`}>{isRegistrationOpen ? 'Abiertas' : 'Cerradas'}</p>
                 <button onClick={onToggleStatus} className="text-[10px] underline text-slate-400 hover:text-slate-600 uppercase font-black">Cambiar</button>
             </div>
           </div>
@@ -203,14 +207,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className={`p-2 rounded-lg ${loadingAnalysis ? 'bg-purple-200 text-purple-700' : 'bg-purple-100 text-purple-600'}`}>
             {loadingAnalysis ? <RefreshCw className="w-6 h-6 animate-spin" /> : <BrainCircuit className="w-6 h-6" />}
           </div>
-          <div><p className="text-xs text-slate-500 font-medium">Análisis IA</p><p className="text-sm font-bold text-purple-700">{loadingAnalysis ? 'Procesando...' : 'Generar Informe'}</p></div>
+          <div><p className="text-xs text-slate-500 font-medium">Gemini IA</p><p className="text-sm font-bold text-purple-700">{loadingAnalysis ? 'Analizando...' : 'Generar Informe'}</p></div>
         </button>
       </div>
 
-      {deleteSuccessMessage && (
-        <div className="bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-fade-in-up">
-            <CheckCircle2 className="w-5 h-5 shrink-0" />
-            <p className="font-bold text-sm">{deleteSuccessMessage}</p>
+      {successMessage && (
+        <div className="bg-green-600 text-white px-6 py-4 rounded-xl shadow-xl flex items-center gap-3 animate-fade-in border-b-4 border-green-800">
+            <CheckCircle2 className="w-6 h-6 shrink-0" />
+            <p className="font-black text-sm uppercase tracking-tight">{successMessage}</p>
+            <button onClick={() => setSuccessMessage(null)} className="ml-auto opacity-70 hover:opacity-100">✕</button>
         </div>
       )}
 
@@ -229,8 +234,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
       <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
           <div className="flex border-b border-slate-200 bg-slate-50">
-              <button onClick={() => setActiveTab('database')} className={`flex-1 py-4 text-xs font-black tracking-widest transition-all ${activeTab === 'database' ? 'text-blue-600 border-b-2 border-blue-600 bg-white' : 'text-slate-400 hover:text-slate-600'}`}>BASE DE DATOS CIE</button>
-              <button onClick={() => setActiveTab('live')} className={`flex-1 py-4 text-xs font-black tracking-widest transition-all ${activeTab === 'live' ? 'text-orange-600 border-b-2 border-orange-600 bg-white' : 'text-slate-400 hover:text-slate-600'}`}>CARRERA ACTUAL</button>
+              <button onClick={() => setActiveTab('database')} className={`flex-1 py-4 text-xs font-black tracking-widest transition-all ${activeTab === 'database' ? 'text-blue-600 border-b-2 border-blue-600 bg-white' : 'text-slate-400 hover:text-slate-600'}`}>BASE DE DATOS (PILOTOS)</button>
+              <button onClick={() => setActiveTab('live')} className={`flex-1 py-4 text-xs font-black tracking-widest transition-all ${activeTab === 'live' ? 'text-orange-600 border-b-2 border-orange-600 bg-white' : 'text-slate-400 hover:text-slate-600'}`}>CARRERA EN CURSO</button>
           </div>
 
           {activeTab === 'database' && (
@@ -238,35 +243,40 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="p-4 bg-white border-b border-slate-100 flex flex-col sm:flex-row justify-between gap-4">
                     <div className="relative flex-1 max-w-md">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                        <input type="text" placeholder="Filtrar por nombre, número o categoría..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+                        <input type="text" placeholder="Buscar por nombre, número o categoría..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
-                    <button onClick={downloadDatabaseCSV} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold shadow-sm hover:bg-slate-50 transition-colors"><FileSpreadsheet className="w-4 h-4 text-green-600" /> Exportar Base</button>
+                    <button onClick={downloadDatabaseCSV} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold shadow-sm hover:bg-slate-50 transition-colors"><FileSpreadsheet className="w-4 h-4 text-green-600" /> Exportar Datos</button>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead><tr className="bg-slate-900 text-white text-[10px] uppercase tracking-widest font-black"><th className="p-4">No. Moto</th><th className="p-4">Piloto</th><th className="p-4">Categoría</th><th className="p-4 text-center">Gestionar</th></tr></thead>
+                        <thead><tr className="bg-slate-900 text-white text-[10px] uppercase tracking-widest font-black"><th className="p-4">Número</th><th className="p-4">Información del Piloto</th><th className="p-4">Categoría</th><th className="p-4 text-center">Gestionar / Liberar</th></tr></thead>
                         <tbody className="divide-y divide-slate-100">
                         {sortedDatabase.length > 0 ? sortedDatabase.map(p => (
                             <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="p-4 font-mono font-black text-blue-600">#{p.motoNumber}</td>
-                                <td className="p-4"><div className="text-sm font-bold text-slate-800">{p.fullName}</div><div className="text-[10px] text-slate-400">ID: {p.accessCode}</div></td>
-                                <td className="p-4 text-xs font-bold text-slate-500 uppercase">{p.category}</td>
-                                <td className="p-4 text-center min-w-[180px]">
+                                <td className="p-4">
+                                  <div className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg border border-blue-100 font-mono font-black text-lg inline-block shadow-inner">
+                                    #{p.motoNumber}
+                                  </div>
+                                </td>
+                                <td className="p-4">
+                                  <div className="text-sm font-bold text-slate-800">{p.fullName}</div>
+                                  <div className="text-[10px] text-slate-400 font-medium">Código: {p.accessCode} • {p.residence}</div>
+                                </td>
+                                <td className="p-4 text-xs font-black text-slate-500 uppercase tracking-tighter">{p.category}</td>
+                                <td className="p-4 text-center min-w-[200px]">
                                     {confirmingDeleteId === p.id ? (
-                                        <div className="flex flex-col items-center gap-1 animate-fade-in p-1 bg-red-50 rounded-lg border border-red-100">
-                                            <span className="text-[8px] font-black text-red-700 uppercase">¿LIBERAR NÚMERO #{p.motoNumber}?</span>
+                                        <div className="flex flex-col items-center gap-1 animate-fade-in p-2 bg-red-50 rounded-xl border border-red-200 shadow-sm">
+                                            <span className="text-[9px] font-black text-red-700 uppercase leading-none mb-1 text-center">¿BORRAR REGISTRO Y LIBERAR #{p.motoNumber}?</span>
                                             <div className="flex items-center gap-2">
                                                 <button 
                                                   onClick={() => handleDeleteWithFeedback(p.id, p.motoNumber)}
-                                                  className="p-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 shadow-sm flex items-center gap-1 px-2 text-[10px] font-bold"
-                                                  title="Confirmar eliminación y liberar número"
+                                                  className="p-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-sm flex items-center gap-1 px-3 text-[10px] font-black uppercase"
                                                 >
-                                                    <Check className="w-3 h-3" /> SÍ, BORRAR
+                                                    <Check className="w-3 h-3" /> CONFIRMAR
                                                 </button>
                                                 <button 
                                                   onClick={() => setConfirmingDeleteId(null)}
-                                                  className="p-1.5 bg-slate-200 text-slate-600 rounded-md hover:bg-slate-300"
-                                                  title="Cancelar"
+                                                  className="p-1.5 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300"
                                                 >
                                                     <X className="w-3 h-3" />
                                                 </button>
@@ -275,16 +285,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                     ) : (
                                         <button 
                                           onClick={() => setConfirmingDeleteId(p.id)} 
-                                          className="p-2 text-slate-300 hover:text-red-600 transition-colors group flex items-center gap-2 mx-auto" 
-                                          title="Eliminar registro y liberar número de moto"
+                                          className="p-2 text-slate-300 hover:text-red-600 transition-all group flex flex-col items-center gap-1 mx-auto" 
+                                          title="Borrar piloto y liberar su número"
                                         >
-                                          <Trash2 className="w-5 h-5" />
-                                          <span className="text-[9px] font-bold opacity-0 group-hover:opacity-100 transition-opacity uppercase">Borrar y liberar</span>
+                                          <div className="p-2 rounded-full hover:bg-red-50 transition-colors">
+                                            <UserX className="w-5 h-5" />
+                                          </div>
+                                          <span className="text-[8px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">Eliminar y Liberar</span>
                                         </button>
                                     )}
                                 </td>
                             </tr>
-                        )) : <tr><td colSpan={4} className="p-10 text-center text-slate-400 italic">No hay registros coincidentes.</td></tr>}
+                        )) : <tr><td colSpan={4} className="p-10 text-center text-slate-400 italic">No se encontraron pilotos que coincidan con la búsqueda.</td></tr>}
                         </tbody>
                     </table>
                 </div>
@@ -396,7 +408,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
           )}
       </div>
-      <div className="mt-8 text-center text-[10px] text-slate-300 font-black uppercase tracking-[0.3em]">ENGINE v2.9 // CIE OFFICIAL</div>
+      <div className="mt-8 text-center text-[10px] text-slate-300 font-black uppercase tracking-[0.3em]">MOTO REG v2.9 // CIE OFFICIAL</div>
     </div>
   );
 };

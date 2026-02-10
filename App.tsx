@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Participant, TransponderEntry } from './types';
 import RegistrationForm from './components/RegistrationForm';
@@ -8,7 +9,7 @@ import WelcomeView from './components/WelcomeView';
 import CodeRecoveryView from './components/CodeRecoveryView';
 import { ADMIN_PASSWORD } from './constants';
 import { supabase, mapFromDb, mapToDb } from './services/supabase';
-import { Bike, ShieldCheck, Lock, Radio, List, Loader2 } from 'lucide-react';
+import { Bike, ShieldCheck, Lock, Radio, List, Loader2, AlertCircle, WifiOff, CloudOff } from 'lucide-react';
 
 type ViewState = 'home' | 'registration' | 'admin' | 'login' | 'transponder' | 'public-list' | 'code-recovery';
 
@@ -18,132 +19,169 @@ function App() {
   const [currentRaceName, setCurrentRaceName] = useState<string>("Carrera General");
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
   
   const [currentView, setCurrentView] = useState<ViewState>('home');
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [loginError, setLoginError] = useState(false);
 
-  // Carga inicial de datos desde Supabase
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      setIsLoading(true);
+  // Cargar datos locales o de Supabase
+  const fetchData = async () => {
+    setIsLoading(true);
+    setDataError(null);
+
+    // Intentar cargar de localStorage primero (Respaldo local)
+    const localParts = localStorage.getItem('motoreg_participants');
+    const localTrans = localStorage.getItem('motoreg_transponders');
+    const localRace = localStorage.getItem('motoreg_race_name');
+
+    if (localParts) setParticipants(JSON.parse(localParts));
+    if (localTrans) setTransponderEntries(JSON.parse(localTrans));
+    if (localRace) setCurrentRaceName(localRace);
+
+    // Si Supabase está conectado, intentar sincronizar
+    if (supabase) {
       try {
-        // 1. Participantes
-        const { data: partData } = await supabase.from('participants').select('*');
-        if (partData) setParticipants(mapFromDb(partData));
+        const { data: partData, error: partError } = await supabase.from('participants').select('*');
+        if (!partError && partData) {
+          const mapped = mapFromDb(partData);
+          setParticipants(mapped);
+          localStorage.setItem('motoreg_participants', JSON.stringify(mapped));
+        }
 
-        // 2. Transponders
         const { data: transData } = await supabase.from('transponder_entries').select('*');
-        if (transData) setTransponderEntries(mapFromDb(transData));
-
-        // 3. Settings (Race Name & Status)
-        const { data: settingsData } = await supabase.from('settings').select('*');
-        if (settingsData) {
-          const raceName = settingsData.find(s => s.key === 'race_name')?.value;
-          const regStatus = settingsData.find(s => s.key === 'registration_open')?.value;
-          if (raceName) setCurrentRaceName(raceName);
-          if (regStatus !== undefined) setIsRegistrationOpen(regStatus === 'true');
+        if (transData) {
+          const mapped = mapFromDb(transData);
+          setTransponderEntries(mapped);
+          localStorage.setItem('motoreg_transponders', JSON.stringify(mapped));
         }
       } catch (error) {
-        console.error("Error al cargar datos iniciales:", error);
-      } finally {
-        setIsLoading(false);
+        console.warn("Supabase no disponible, usando modo local.");
       }
-    };
+    }
 
-    fetchInitialData();
+    setIsLoading(false);
+  };
 
-    // Suscripciones en tiempo real
-    const participantsChannel = supabase.channel('schema-db-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          const newPart = mapFromDb(payload.new) as Participant;
-          setParticipants(prev => {
-            if (prev.some(p => p.id === newPart.id)) return prev;
-            return [newPart, ...prev];
-          });
-        } else if (payload.eventType === 'DELETE') {
-          setParticipants(prev => prev.filter(p => p.id !== payload.old.id));
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transponder_entries' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setTransponderEntries(prev => [mapFromDb(payload.new) as TransponderEntry, ...prev]);
-        } else if (payload.eventType === 'DELETE') {
-          setTransponderEntries(prev => prev.filter(e => e.id !== payload.old.id));
-        }
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'settings' }, (payload) => {
-        if (payload.new.key === 'race_name') setCurrentRaceName(payload.new.value);
-        if (payload.new.key === 'registration_open') setIsRegistrationOpen(payload.new.value === 'true');
-      })
-      .subscribe();
+  useEffect(() => {
+    fetchData();
 
-    return () => {
-      supabase.removeChannel(participantsChannel);
-    };
+    if (supabase) {
+      const channel = supabase.channel('app-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, (payload) => {
+          fetchData(); 
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'transponder_entries' }, (payload) => {
+          fetchData();
+        })
+        .subscribe();
+
+      return () => { supabase.removeChannel(channel); };
+    }
   }, []);
 
-  const handleRegister = async (newParticipantData: Omit<Participant, 'id' | 'registrationDate'>) => {
-    const dbData = mapToDb({
-      ...newParticipantData,
-      registrationDate: new Date().toISOString(),
-    });
+  // Guardar en localStorage cada vez que cambian los datos (Modo Local Seguro)
+  useEffect(() => {
+    if (!isLoading) {
+      localStorage.setItem('motoreg_participants', JSON.stringify(participants));
+      localStorage.setItem('motoreg_transponders', JSON.stringify(transponderEntries));
+      localStorage.setItem('motoreg_race_name', currentRaceName);
+    }
+  }, [participants, transponderEntries, currentRaceName, isLoading]);
 
-    const { error } = await supabase.from('participants').insert([dbData]);
-    if (error) console.error("Error al registrar:", error);
+  const handleRegister = async (newParticipantData: Omit<Participant, 'id' | 'registrationDate'>) => {
+    const tempId = 'p_' + Date.now();
+    const registrationDate = new Date().toISOString();
+    const fullParticipant: Participant = { ...newParticipantData, id: tempId, registrationDate };
+
+    // Registro Local inmediato
+    setParticipants(prev => [fullParticipant, ...prev]);
+
+    if (supabase) {
+      try {
+        const dbData = mapToDb({ ...newParticipantData, registrationDate });
+        const { data, error } = await supabase.from('participants').insert([dbData]).select();
+        if (!error && data && data[0]) {
+          const real = mapFromDb(data[0]) as Participant;
+          setParticipants(prev => prev.map(p => p.id === tempId ? real : p));
+        }
+      } catch (e) { console.error("Error sincronizando registro:", e); }
+    }
   };
 
   const handleTransponderCheckIn = async (participantId: string) => {
-    // Evitar duplicados
-    if (transponderEntries.some(e => e.participantId === participantId)) return;
+    const tempEntry: TransponderEntry = {
+      id: 'temp_' + Date.now(),
+      participantId: participantId,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Check-in Local inmediato
+    setTransponderEntries(prev => [tempEntry, ...prev]);
 
-    const dbData = mapToDb({
-        participantId,
-        timestamp: new Date().toISOString()
-    });
-
-    const { error } = await supabase.from('transponder_entries').insert([dbData]);
-    if (error) console.error("Error en check-in:", error);
+    if (supabase) {
+      try {
+        const dbData = mapToDb({ participantId, timestamp: tempEntry.timestamp });
+        const { data, error } = await supabase.from('transponder_entries').insert([dbData]).select();
+        if (!error && data && data[0]) {
+          const realEntry = mapFromDb(data[0]) as TransponderEntry;
+          setTransponderEntries(prev => prev.map(e => e.id === tempEntry.id ? realEntry : e));
+        }
+      } catch (e) { console.error("Error sincronizando check-in:", e); }
+    }
   };
 
   const handleStartNewRace = async (raceName: string) => {
-    // 1. Limpiar transponders en DB
-    await supabase.from('transponder_entries').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
     setTransponderEntries([]);
-
-    // 2. Actualizar nombre de carrera en settings
-    await supabase.from('settings').upsert({ key: 'race_name', value: raceName });
     setCurrentRaceName(raceName);
+    
+    if (supabase) {
+      try {
+        await supabase.from('transponder_entries').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await supabase.from('settings').upsert({ key: 'race_name', value: raceName });
+      } catch (e) { console.error(e); }
+    }
   };
 
   const handleDeleteParticipant = async (id: string) => {
-    // Optimistic UI: Remove locally first to free the number immediately
-    const deletedParticipant = participants.find(p => p.id === id);
+    // 1. ELIMINACIÓN LOCAL INMEDIATA (Libera el número al instante)
     setParticipants(prev => prev.filter(p => p.id !== id));
     setTransponderEntries(prev => prev.filter(e => e.participantId !== id));
 
-    try {
-        // Eliminar de transponders primero (si hay FK) o manual
+    // 2. ELIMINACIÓN EN NUBE (Si está configurado)
+    if (supabase) {
+      try {
+        // Primero eliminar entradas de transponder para evitar errores de llave foránea
         await supabase.from('transponder_entries').delete().eq('participant_id', id);
-        const { error } = await supabase.from('participants').delete().eq('id', id);
-        if (error) throw error;
-    } catch (error) {
-        console.error("Error al eliminar participante:", error);
-        // Rollback if error
-        if (deletedParticipant) {
-            setParticipants(prev => [deletedParticipant, ...prev]);
-        }
+        await supabase.from('participants').delete().eq('id', id);
+      } catch (e) { 
+        console.error("Error al eliminar de la nube:", e);
+      }
     }
   };
 
   const handleRemoveTransponderEntry = async (entryId: string) => {
-    await supabase.from('transponder_entries').delete().eq('id', entryId);
+    setTransponderEntries(prev => prev.filter(e => e.id !== entryId));
+    if (supabase) {
+      try {
+        await supabase.from('transponder_entries').delete().eq('id', entryId);
+      } catch (e) { console.error(e); }
+    }
+  };
+
+  const toggleStatus = async () => {
+    const nextStatus = !isRegistrationOpen;
+    setIsRegistrationOpen(nextStatus);
+    if (supabase) {
+      try {
+        await supabase.from('settings').upsert({ key: 'registration_open', value: String(nextStatus) });
+      } catch (e) { console.error(e); }
+    }
   };
 
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminPasswordInput === ADMIN_PASSWORD) {
+    if (adminPasswordInput.trim() === ADMIN_PASSWORD) {
       setCurrentView('admin');
       setAdminPasswordInput('');
       setLoginError(false);
@@ -152,112 +190,88 @@ function App() {
     }
   };
 
-  const toggleStatus = async () => {
-    const newStatus = !isRegistrationOpen;
-    await supabase.from('settings').upsert({ key: 'registration_open', value: newStatus.toString() });
-    setIsRegistrationOpen(newStatus);
-  };
-
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center space-y-4">
           <Loader2 className="w-12 h-12 text-orange-500 animate-spin mx-auto" />
-          <p className="text-slate-500 font-black uppercase tracking-widest text-xs">Conectando con CIE Cloud...</p>
+          <p className="text-slate-500 font-black uppercase tracking-widest text-xs">Conectando MotoReg...</p>
         </div>
       </div>
     );
   }
 
-  const renderContent = () => {
-    switch (currentView) {
-      case 'home':
-        return <WelcomeView onGoToRegistration={() => setCurrentView('registration')} onGoToTransponder={() => setCurrentView('transponder')} onViewPublicList={() => setCurrentView('public-list')} onGoToRecovery={() => setCurrentView('code-recovery')} />;
-      case 'registration':
-        return (
-          <div className="space-y-8 animate-fade-in">
-            <div className="flex justify-center">
-                 <div className="flex flex-col gap-2 max-w-[340px] w-full">
-                    <button onClick={() => setCurrentView('public-list')} className="bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 px-6 py-4 rounded-xl shadow-md flex items-center gap-4 transition-transform hover:scale-105 w-full">
-                        <List className="w-6 h-6 text-orange-500 shrink-0" />
-                        <div className="text-left">
-                            <span className="block text-xs text-slate-500 font-medium uppercase tracking-wide">Consulta</span>
-                            <span className="block font-bold text-sm">Lista de Pilotos Registrados</span>
-                        </div>
-                    </button>
-                 </div>
-            </div>
-            <RegistrationForm onRegister={handleRegister} isOpen={isRegistrationOpen} existingParticipants={participants} onGoToTransponder={() => setCurrentView('transponder')} />
-          </div>
-        );
-      case 'admin':
-        return (
-          <AdminPanel 
-            participants={participants}
-            transponderEntries={transponderEntries}
-            isRegistrationOpen={isRegistrationOpen}
-            currentRaceName={currentRaceName}
-            onToggleStatus={toggleStatus}
-            onLogout={() => setCurrentView('home')}
-            onStartNewRace={handleStartNewRace}
-            onDeleteParticipant={handleDeleteParticipant}
-            onRemoveTransponderEntry={handleRemoveTransponderEntry}
-          />
-        );
-      case 'transponder':
-        return <TransponderView participants={participants} transponderEntries={transponderEntries} currentRaceName={currentRaceName} onCheckIn={handleTransponderCheckIn} onHome={() => setCurrentView('home')} onViewPublicList={() => setCurrentView('public-list')} />;
-      case 'public-list':
-        return <LiveParticipantList participants={participants} transponderEntries={transponderEntries} currentRaceName={currentRaceName} onBack={() => setCurrentView('home')} />;
-      case 'code-recovery':
-        return <CodeRecoveryView participants={participants} onBack={() => setCurrentView('home')} />;
-      case 'login':
-        return (
-          <div className="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg mt-10">
-            <div className="text-center mb-6">
-              <div className="bg-slate-100 p-4 rounded-full w-16 h-16 mx-auto flex items-center justify-center mb-4">
-                <Lock className="w-8 h-8 text-slate-700" />
-              </div>
-              <h2 className="text-2xl font-bold text-slate-800">Acceso Administrativo</h2>
-              <p className="text-slate-500 text-sm">Ingresa la contraseña para gestionar el evento</p>
-            </div>
-            <form onSubmit={handleAdminLogin}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Contraseña</label>
-                <input type="password" value={adminPasswordInput} onChange={(e) => setAdminPasswordInput(e.target.value)} className="w-full px-4 py-2 bg-slate-50 text-slate-900 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none placeholder-slate-400" placeholder="••••••" autoFocus />
-                {loginError && <p className="text-red-500 text-xs mt-2">Contraseña incorrecta.</p>}
-              </div>
-              <div className="flex gap-3">
-                <button type="button" onClick={() => setCurrentView('home')} className="w-1/3 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors">Cancelar</button>
-                <button type="submit" className="w-2/3 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors font-medium">Entrar</button>
-              </div>
-            </form>
-          </div>
-        );
-      default: return null;
-    }
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-12">
       <nav className="bg-slate-900 text-white shadow-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2 font-bold text-xl cursor-pointer hover:text-orange-400 transition-colors" onClick={() => setCurrentView('home')}>
-              <Bike className="w-8 h-8 text-orange-500" />
-              <span className="tracking-tight">MOTO<span className="text-orange-500">REG</span></span>
-            </div>
-            <div className="flex items-center gap-4 sm:gap-6">
-              <button onClick={() => setCurrentView('public-list')} className="flex items-center gap-2 text-sm text-slate-300 hover:text-white transition-colors">
-                <List className="w-4 h-4" /><span className="hidden sm:inline">Lista de Pilotos</span>
-              </button>
-              <button onClick={() => setCurrentView('login')} className="flex items-center gap-2 text-sm text-slate-300 hover:text-white transition-colors">
-                <ShieldCheck className="w-4 h-4" /><span className="hidden sm:inline">Admin</span>
-              </button>
-            </div>
+        <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-16">
+          <div className="flex items-center gap-2 font-bold text-xl cursor-pointer" onClick={() => setCurrentView('home')}>
+            <Bike className="w-8 h-8 text-orange-500" />
+            <span className="tracking-tight">MOTO<span className="text-orange-500">REG</span></span>
+            {!supabase && (
+              <span className="ml-2 flex items-center gap-1 bg-red-500/20 text-red-400 text-[8px] px-2 py-0.5 rounded-full border border-red-500/30 font-black uppercase tracking-widest">
+                <WifiOff className="w-2 h-2" /> Local
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
+            <button onClick={() => setCurrentView('public-list')} className="text-sm text-slate-300 hover:text-white flex items-center gap-1">
+              <List className="w-4 h-4" /> <span className="hidden sm:inline">Pilotos</span>
+            </button>
+            <button onClick={() => setCurrentView('login')} className="text-sm text-slate-300 hover:text-white flex items-center gap-1">
+              <ShieldCheck className="w-4 h-4" /> <span className="hidden sm:inline">Admin</span>
+            </button>
           </div>
         </div>
       </nav>
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">{renderContent()}</main>
+
+      <main className="max-w-7xl mx-auto px-4 pt-8">
+        {!supabase && currentView === 'home' && (
+          <div className="mb-6 bg-blue-50 border border-blue-100 text-blue-700 px-6 py-4 rounded-2xl flex items-center gap-3 shadow-sm animate-fade-in">
+            <CloudOff className="w-5 h-5 shrink-0" />
+            <p className="text-xs font-bold">Modo Local: Los cambios se guardan solo en este equipo.</p>
+          </div>
+        )}
+
+        {currentView === 'home' && <WelcomeView onGoToRegistration={() => setCurrentView('registration')} onGoToTransponder={() => setCurrentView('transponder')} onViewPublicList={() => setCurrentView('public-list')} onGoToRecovery={() => setCurrentView('code-recovery')} />}
+        {currentView === 'registration' && <RegistrationForm onRegister={handleRegister} isOpen={isRegistrationOpen} existingParticipants={participants} onGoToTransponder={() => setCurrentView('transponder')} />}
+        {currentView === 'transponder' && <TransponderView participants={participants} transponderEntries={transponderEntries} currentRaceName={currentRaceName} onCheckIn={handleTransponderCheckIn} onHome={() => setCurrentView('home')} onViewPublicList={() => setCurrentView('public-list')} />}
+        {currentView === 'admin' && (
+          <AdminPanel 
+            participants={participants} 
+            transponderEntries={transponderEntries} 
+            isRegistrationOpen={isRegistrationOpen} 
+            currentRaceName={currentRaceName} 
+            onToggleStatus={toggleStatus} 
+            onLogout={() => setCurrentView('home')} 
+            onStartNewRace={handleStartNewRace} 
+            onDeleteParticipant={handleDeleteParticipant} 
+            onRemoveTransponderEntry={handleRemoveTransponderEntry} 
+          />
+        )}
+        {currentView === 'public-list' && <LiveParticipantList participants={participants} transponderEntries={transponderEntries} currentRaceName={currentRaceName} onBack={() => setCurrentView('home')} />}
+        {currentView === 'code-recovery' && <CodeRecoveryView participants={participants} onBack={() => setCurrentView('home')} />}
+        {currentView === 'login' && (
+          <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-2xl mt-10">
+            <h2 className="text-2xl font-black text-slate-800 text-center mb-6">Acceso Admin</h2>
+            <form onSubmit={handleAdminLogin}>
+              <input 
+                type="password" 
+                value={adminPasswordInput} 
+                onChange={(e) => setAdminPasswordInput(e.target.value)} 
+                className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl mb-4 outline-none focus:ring-4 focus:ring-orange-500/10 text-center text-xl font-bold tracking-widest" 
+                placeholder="••••••" 
+                autoFocus 
+              />
+              {loginError && <p className="text-red-500 text-xs mb-4 font-bold text-center">Contraseña incorrecta.</p>}
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setCurrentView('home')} className="flex-1 py-4 bg-slate-100 rounded-2xl font-black uppercase text-xs">Atrás</button>
+                <button type="submit" className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs">Entrar</button>
+              </div>
+            </form>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
