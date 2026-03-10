@@ -11,8 +11,8 @@ export const CATEGORIES = [
   Category.Clase50,
   Category.Novatos,
   Category.Promocionales,
-  Category.Femenil,
   Category.CC85,
+  Category.Femenil,
   Category.CC65,
   Category.CC50,
 ];

@@ -159,8 +159,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const downloadLiveRaceCSV = () => {
-    const headers = ["Moto,Piloto,Categoria,Hora Registro"];
-    const rows = sortedRaceParticipants.map(p => `${p.motoNumber},"${p.fullName}","${p.category}",${new Date(p.checkInTime).toLocaleTimeString()}`);
+    const headers = ["Moto,Piloto,Categoria"];
+    const rows = sortedRaceParticipants.map(p => `${p.motoNumber},"${p.fullName}","${p.category}"`);
     const csvContent = "data:text/csv;charset=utf-8," + headers.concat(rows).join("\n");
     const link = document.createElement("a");
     link.href = encodeURI(csvContent);
@@ -365,13 +365,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead><tr className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black border-b border-slate-200"><th className="p-4">No. Moto</th><th className="p-4">Piloto</th><th className="p-4">Hora</th><th className="p-4 text-center">Quitar</th></tr></thead>
+                        <thead><tr className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black border-b border-slate-200"><th className="p-4">No. Moto</th><th className="p-4">Piloto</th><th className="p-4">Categoría</th><th className="p-4 text-center">Quitar</th></tr></thead>
                         <tbody className="divide-y divide-slate-100">
                         {sortedRaceParticipants.length > 0 ? sortedRaceParticipants.map(p => (
                             <tr key={p.entryId} className="hover:bg-slate-50 transition-colors">
                                 <td className="p-4 font-mono text-xl font-black text-slate-800">#{p.motoNumber}</td>
-                                <td className="p-4"><div className="text-sm font-bold text-slate-800">{p.fullName}</div><div className="text-[9px] text-orange-600 uppercase font-black tracking-widest">{p.category}</div></td>
-                                <td className="p-4 text-xs text-slate-500 font-mono">{new Date(p.checkInTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
+                                <td className="p-4"><div className="text-sm font-bold text-slate-800">{p.fullName}</div></td>
+                                <td className="p-4 text-xs font-black text-slate-500 uppercase tracking-tighter">{p.category}</td>
                                 <td className="p-4 text-center min-w-[120px]">
                                     {confirmingRemoveId === p.entryId ? (
                                         <div className="flex items-center justify-center gap-2 animate-fade-in">

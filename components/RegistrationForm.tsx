@@ -16,6 +16,9 @@ interface CategoryRule {
   prefix?: string;
   prefixMin?: number;
   prefixMax?: number;
+  suffix?: string;
+  suffixMin?: number;
+  suffixMax?: number;
   desc: string;
 }
 
@@ -30,8 +33,8 @@ const CATEGORY_RULES: Record<string, CategoryRule> = {
   [Category.Clase50]: { min: 700, max: 799, desc: "700 - 799" },
   [Category.Novatos]: { min: 800, max: 999, desc: "800 - 999" },
   [Category.Promocionales]: { min: 1000, max: 1099, desc: "1000 - 1099" },
-  [Category.Femenil]: { prefix: 'F', prefixMin: 1, prefixMax: 99, desc: "F01 - F99" },
-  [Category.CC85]: { prefix: 'J', prefixMin: 1, prefixMax: 99, desc: "J01 - J99" },
+  [Category.CC85]: { suffix: 'J', suffixMin: 1, suffixMax: 99, desc: "01J - 99J" },
+  [Category.Femenil]: { suffix: 'F', suffixMin: 1, suffixMax: 99, desc: "01F - 99F" },
   [Category.CC65]: { prefix: 'I', prefixMin: 1, prefixMax: 99, desc: "I01 - I99" },
   [Category.CC50]: { prefix: 'I', prefixMin: 1, prefixMax: 99, desc: "I01 - I99" },
 };
@@ -57,6 +60,11 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onRegister, isOpen,
     if (rule.prefix) {
       for (let i = rule.prefixMin!; i <= rule.prefixMax!; i++) {
         const formatted = `${rule.prefix}${i.toString().padStart(2, '0')}`;
+        allPossible.push(formatted);
+      }
+    } else if (rule.suffix) {
+      for (let i = rule.suffixMin!; i <= rule.suffixMax!; i++) {
+        const formatted = `${i.toString().padStart(2, '0')}${rule.suffix}`;
         allPossible.push(formatted);
       }
     } else {
@@ -232,7 +240,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onRegister, isOpen,
         {/* Phone */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
-            <Phone className="w-4 h-4 text-slate-500" /> Teléfono
+            <Phone className="w-4 h-4 text-slate-500" /> Teléfono (10 digitos)
           </label>
           <input
             type="tel"
